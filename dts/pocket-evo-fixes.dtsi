@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * AYANEO Pocket EVO fixes on top of the EVO DTB shipped in steamos-AYANEO-TEST-2
+ * (all verified on hardware, see README):
+ *
+ * 1) Keep the ABL continuous-splash reservation. Without it the panel stays dark
+ *    (DSI/DPU look healthy, DDIC alive with TE ~55 Hz instead of 120, no emission).
+ * 2) Extra buttons wired to TLMM GPIOs (values from the stock Android DT,
+ *    /proc/device-tree/soc/gpio_key + tlmm_key_default / turbo_key_default).
+ *    Same approach as ROCKNIX's gpio-keys-pocket-s-mini (KEY_A / KEY_EQUAL).
+ *    Measured on the EVO:
+ *      left inner trigger button  -> gpio170 KEY_RIGHTSHIFT
+ *      right inner trigger button -> gpio91  KEY_LEFT
+ *      right-side AYANEO button   -> gpio85  KEY_A
+ *      right-side lower button    -> gpio169 KEY_EQUAL
+ *    gpio88 (KEY_RIGHT) and gpio109 (turbo, 400) exist in the Android DT but no event was seen on the EVO.
+ *    gpio85 also appears in hub-i2c9-data-clk-state, whose only user (i2c@9a4000) is disabled on the EVO.
+ */
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+
+/ {
+	reserved-memory {
+		splash_region@b8000000 {
+			reg = <0x0 0xb8000000 0x0 0x2b00000>;
+			label = "cont_splash_region";
+			no-map;
+		};
+	};
+
+	gpio-keys-pocket-evo {
+		compatible = "gpio-keys";
+		label = "gpio-keys-pocket-evo";
+		pinctrl-names = "default";
+		pinctrl-0 = <&evo_keys_default>;
+
+		key-aya {
+			label = "AYANEO";
+			gpios = <&tlmm 85 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_A>;
+			debounce-interval = <15>;
+		};
+
+		key-equal {
+			label = "EQUAL";
+			gpios = <&tlmm 169 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_EQUAL>;
+			debounce-interval = <15>;
+		};
+
+		key-lc {
+			label = "LC";
+			gpios = <&tlmm 91 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_LEFT>;
+			debounce-interval = <15>;
+		};
+
+		key-rc {
+			label = "RC";
+			gpios = <&tlmm 88 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_RIGHT>;
+			debounce-interval = <15>;
+		};
+
+		key-rc2 {
+			label = "RC2";
+			gpios = <&tlmm 170 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_RIGHTSHIFT>;
+			debounce-interval = <15>;
+		};
+
+		key-turbo {
+			label = "TURBO";
+			gpios = <&tlmm 109 GPIO_ACTIVE_LOW>;
+			linux,code = <400>;
+			debounce-interval = <15>;
+		};
+	};
+};
+
+&tlmm {
+	evo_keys_default: evo-keys-default-state {
+		pins = "gpio85", "gpio88", "gpio91", "gpio109", "gpio169", "gpio170";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-up;
+	};
+};

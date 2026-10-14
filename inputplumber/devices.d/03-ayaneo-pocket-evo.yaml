@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/ShadowBlip/InputPlumber/main/rootfs/usr/share/inputplumber/schema/composite_device_v1.json
+# AYANEO Pocket EVO -> virtual Steam Deck (deck-uhid + keyboard), same layout as the image's 02-ayn-odin.yaml.
+#
+# Sources:
+#   - built-in pad: USB HID "AYANEO Controller" 4001:0428 behind the Renesas uPD720201
+#     (needs xhci-pci-renesas, CONFIG_USB_XHCI_PCI_RENESAS=m)
+#   - extra buttons: gpio-keys-pocket-evo (TLMM 85/91/169/170, values from the stock Android DT)
+version: 1
+kind: CompositeDevice
+name: AYANEO Pocket EVO
+
+matches:
+  - udev:
+      sys_path: /sys/firmware/devicetree/base
+      attributes:
+        - name: model
+          value: AYANEO Pocket EVO
+
+single_source: false
+
+source_devices:
+  - group: gamepad
+    evdev:
+      vendor_id: "4001"
+      product_id: "0428"
+      handler: event*
+    capability_map_id: ayaneo_evo
+    passthrough: false
+  - group: gamepad
+    evdev:
+      name: gpio-keys-pocket-evo
+      handler: event*
+    capability_map_id: ayaneo_evo
+    passthrough: false
+
+options:
+  auto_manage: true
+
+target_devices:
+  - deck-uhid
+  - keyboard
