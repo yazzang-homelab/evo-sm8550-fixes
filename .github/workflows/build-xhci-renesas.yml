@@ -1,0 +1,78 @@
+name: xhci-pci-renesas for 7.2.8-edge-sm8550
+
+# Builds only drivers/usb/host/xhci-pci-renesas.ko for the running kernel of
+# steamos-AYANEO-TEST-2 (Linux 7.2.8-edge-sm8550, MODVERSIONS off, no module signing).
+# Source: vanilla kernel.org 7.2.8 + the device's own IKCONFIG, with only
+# CONFIG_USB_XHCI_PCI_RENESAS switched to =m. The build fails if vermagic does not match.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/build-xhci-renesas.yml"
+      - "config/**"
+
+env:
+  KVER: "7.2.8"
+  VERMAGIC: "7.2.8-edge-sm8550 SMP preempt mod_unload aarch64"
+  ARCH: arm64
+  CROSS_COMPILE: aarch64-linux-gnu-
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container: ubuntu:26.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain (gcc 15, same major as the device kernel)
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            flex bison bc libssl-dev libelf-dev xz-utils curl ca-certificates kmod python3 cpio file
+          aarch64-linux-gnu-gcc --version | head -1
+
+      - name: Kernel source ${{ env.KVER }} (kernel.org, sha256 checked)
+        run: |
+          curl -fsSLO "https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-${KVER}.tar.xz"
+          curl -fsSLO "https://cdn.kernel.org/pub/linux/kernel/v7.x/sha256sums.asc"
+          grep " linux-${KVER}.tar.xz\$" sha256sums.asc | sha256sum -c -
+          tar xf "linux-${KVER}.tar.xz"
+
+      - name: Config = device IKCONFIG + USB_XHCI_PCI_RENESAS=m
+        working-directory: linux-${{ env.KVER }}
+        run: |
+          cp ../config/device-7.2.8-edge-sm8550.config .config
+          ./scripts/config --module USB_XHCI_PCI_RENESAS
+          make olddefconfig
+          grep -E "^CONFIG_USB_XHCI_PCI|^CONFIG_LOCALVERSION=" .config
+          # report what olddefconfig changed vs the device (patch-only symbols vanish; core options must not)
+          diff <(grep '^CONFIG_' ../config/device-7.2.8-edge-sm8550.config | sort) <(grep '^CONFIG_' .config | sort) > ../config-diff.txt || true
+          echo "config diff lines: $(wc -l < ../config-diff.txt)"
+          grep -E "MODULE|SMP|PREEMPT|KALLSYMS|LOCALVERSION|TRACEPOINT|FTRACE|BTF|KASAN|RANDSTRUCT|DEBUG_LIST|SHADOW_CALL|ARM64_BTI|ARM64_PTR_AUTH|CFI" ../config-diff.txt || echo "no core-option differences"
+
+      - name: Build xhci-pci-renesas.ko
+        working-directory: linux-${{ env.KVER }}
+        run: |
+          make -j"$(nproc)" modules_prepare
+          make -j"$(nproc)" KBUILD_MODPOST_WARN=1 M="$PWD/drivers/usb/host" modules
+          ls -l drivers/usb/host/*.ko
+          modinfo drivers/usb/host/xhci-pci-renesas.ko
+          got="$(modinfo -F vermagic drivers/usb/host/xhci-pci-renesas.ko | xargs)"
+          echo "vermagic: '$got'"
+          test "$got" = "$VERMAGIC"
+          aarch64-linux-gnu-strip --strip-debug -o ../xhci-pci-renesas.ko drivers/usb/host/xhci-pci-renesas.ko
+          cd .. && sha256sum xhci-pci-renesas.ko | tee xhci-pci-renesas.ko.sha256 && file xhci-pci-renesas.ko
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xhci-pci-renesas-7.2.8-edge-sm8550
+          path: |
+            xhci-pci-renesas.ko
+            xhci-pci-renesas.ko.sha256
+            config-diff.txt
