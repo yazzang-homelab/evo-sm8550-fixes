@@ -1,0 +1,5 @@
+--- a/usr/share/steamos-odin/devices/sm8550-display.conf
++++ b/usr/share/steamos-odin/devices/sm8550-display.conf
+@@
+-AYANEO Pocket EVO|evo|DSI-1||right|Rotated270|1080|1920|60000|1.5
++AYANEO Pocket EVO|evo|DSI-1||left|Rotated90|1080|1920|60000|1.5

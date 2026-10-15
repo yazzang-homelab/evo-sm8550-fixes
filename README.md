@@ -3,6 +3,12 @@
 Interim fixes for running MaSieS4Fun's SteamOS ARM (SM8550) test image on an **AYANEO Pocket EVO**.
 Everything here was verified on real hardware (EVO Retro Power edition).
 
+## Status (2026-10-15)
+
+Verified after a cold reboot on `steamos-AYANEO-TEST-2`: display, touch, built-in pad (all buttons, sticks,
+analog triggers, D-pad), the 4 extra buttons (Steam / QAM / L4 / R4 / R5 via InputPlumber), Wi-Fi, desktop
+orientation. The Renesas module and the InputPlumber profile load automatically at boot.
+
 ## Findings
 
 | Symptom | Root cause | Fix | Where |
@@ -11,7 +17,7 @@ Everything here was verified on real hardware (EVO Retro Power edition).
 | Built-in pad does nothing | pad sits behind the Renesas uPD720201 PCIe xHCI (1912:0014); kernel has `# CONFIG_USB_XHCI_PCI_RENESAS is not set` | `xhci-pci-renesas.ko` (built by this repo) / `CONFIG_USB_XHCI_PCI_RENESAS=m` | `.github/workflows/build-xhci-renesas.yml` |
 | 4 extra buttons do nothing | they are TLMM GPIO keys (not on the pad); the EVO DTB only has volume-up in gpio-keys | `gpio-keys-pocket-evo` node + pull-up pinctrl, values from the stock Android DT | `dts/pocket-evo-fixes.dtsi` |
 | Extra buttons not usable in Steam | no InputPlumber profile for the EVO | composite device -> virtual Steam Deck (deck-uhid) | `inputplumber/` |
-| Desktop mode upside down | `sm8550-display.conf` lists the EVO as `right\|Rotated270` | `left\|Rotated90` (DTS rotation = 270, like Odin 2 Portal) | image config |
+| Desktop mode upside down | `sm8550-display.conf` lists the EVO as `right\|Rotated270` | `left\|Rotated90` (DTS rotation = 270, like Odin 2 Portal) | `image-config/sm8550-display.conf.patch` |
 
 ## Button layout (InputPlumber -> Steam Deck)
 
@@ -37,9 +43,30 @@ sudo install -m644 inputplumber/capability_maps.d/ayaneo_evo.yaml /etc/inputplum
 sudo systemctl restart inputplumber
 ```
 
-The DTB changes go into the EVO DTB (slot 12) of the image's `KERNEL` (Android boot image v0 with appended DTBs).
+### DTB (splash region + extra buttons)
 
-Rollback: remove the files above, `depmod -a`, restart InputPlumber, and restore the original `KERNEL`.
+The DTB changes go into the EVO DTB of the image's `KERNEL` file on the FAT boot partition
+(Android boot image v0, gzip kernel + appended DTBs). `tools/patch_kernel_evo.py` does this without a kernel tree:
+
+```sh
+pip install fdt
+cp KERNEL KERNEL.orig                       # keep the original
+python3 tools/patch_kernel_evo.py KERNEL.orig KERNEL
+```
+
+It finds the single DTB whose model is `AYANEO Pocket EVO`, adds the same nodes as `dts/pocket-evo-fixes.dtsi`,
+copies everything else byte-for-byte and rewrites the header size/SHA1. It refuses an already patched DTB.
+On TEST-2 the output is byte-identical to the KERNEL tested on hardware.
+
+### Desktop orientation
+
+Apply `image-config/sm8550-display.conf.patch` to `/usr/share/steamos-odin/devices/sm8550-display.conf`
+(one line; game mode is unaffected). Keep a copy of the original file.
+
+### Rollback
+
+Remove the module and InputPlumber files, `depmod -a`, restart InputPlumber,
+put back `KERNEL.orig` and the original `sm8550-display.conf`.
 
 ## What the workflow builds
 
