@@ -9,6 +9,11 @@ Verified after a cold reboot on `steamos-AYANEO-TEST-2`: display, touch, built-i
 analog triggers, D-pad), the 4 extra buttons (Steam / QAM / L4 / R4 / R5 via InputPlumber), Wi-Fi, desktop
 orientation. The Renesas module and the InputPlumber profile load automatically at boot.
 
+`SteamOS-ARM-SM8550 v1.1.1` (kernel `7.2.9-edge-sm8550`) already keeps `splash_region@b8000000` in the EVO DTB
+(identical to the fix), but still lacks the Renesas module, the extra-button DTB nodes, the InputPlumber profile
+and the desktop orientation fix. The workflow builds the module for both 7.2.8 and 7.2.9; `patch_kernel_evo.py`
+keeps an existing identical splash node and only adds the button nodes.
+
 ## Findings
 
 | Symptom | Root cause | Fix | Where |
@@ -34,8 +39,8 @@ orientation. The Renesas module and the InputPlumber profile load automatically 
 
 ```sh
 # module (artifact of the workflow)
-sudo install -D -m644 xhci-pci-renesas.ko /lib/modules/7.2.8-edge-sm8550/updates/xhci-pci-renesas.ko
-sudo depmod -a 7.2.8-edge-sm8550
+sudo install -D -m644 xhci-pci-renesas.ko /lib/modules/$(uname -r)/updates/xhci-pci-renesas.ko
+sudo depmod -a $(uname -r)
 
 # InputPlumber profile
 sudo install -m644 inputplumber/devices.d/03-ayaneo-pocket-evo.yaml /etc/inputplumber/devices.d/
@@ -54,7 +59,8 @@ cp KERNEL KERNEL.orig                       # keep the original
 python3 tools/patch_kernel_evo.py KERNEL.orig KERNEL
 ```
 
-It finds the single DTB whose model is `AYANEO Pocket EVO`, adds the same nodes as `dts/pocket-evo-fixes.dtsi`,
+It finds the single DTB whose model is `AYANEO Pocket EVO`, adds the same nodes as `dts/pocket-evo-fixes.dtsi`
+(an existing splash node is kept only if it matches the verified one),
 copies everything else byte-for-byte and rewrites the header size/SHA1. It refuses an already patched DTB.
 On TEST-2 the output is byte-identical to the KERNEL tested on hardware.
 
@@ -70,7 +76,7 @@ put back `KERNEL.orig` and the original `sm8550-display.conf`.
 
 ## What the workflow builds
 
-`.github/workflows/build-xhci-renesas.yml` builds only `xhci-pci-renesas.ko` for the image kernel
-`7.2.8-edge-sm8550` (vanilla kernel.org 7.2.8 + the image's own IKCONFIG, `USB_XHCI_PCI_RENESAS=m`,
+`.github/workflows/build-xhci-renesas.yml` builds only `xhci-pci-renesas.ko` for the image kernels
+`7.2.8-edge-sm8550` (TEST-2) and `7.2.9-edge-sm8550` (v1.1.1) (vanilla kernel.org source + the image's own IKCONFIG, `USB_XHCI_PCI_RENESAS=m`,
 gcc 15.2.0-16ubuntu1 like the image). The job fails unless vermagic is exactly
-`7.2.8-edge-sm8550 SMP preempt mod_unload aarch64`. Firmware `renesas_usb_fw.mem` is already in the image.
+`<kver>-edge-sm8550 SMP preempt mod_unload aarch64`. Firmware `renesas_usb_fw.mem` is already in the image.

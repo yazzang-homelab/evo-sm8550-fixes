@@ -1,8 +1,10 @@
-name: xhci-pci-renesas for 7.2.8-edge-sm8550
+name: xhci-pci-renesas for edge-sm8550 kernels
 
-# Builds only drivers/usb/host/xhci-pci-renesas.ko for the running kernel of
-# steamos-AYANEO-TEST-2 (Linux 7.2.8-edge-sm8550, MODVERSIONS off, no module signing).
-# Source: vanilla kernel.org 7.2.8 + the device's own IKCONFIG, with only
+# Builds only drivers/usb/host/xhci-pci-renesas.ko for the image kernels
+# (MODVERSIONS off, no module signing):
+#   7.2.8-edge-sm8550  steamos-AYANEO-TEST-2
+#   7.2.9-edge-sm8550  SteamOS-ARM-SM8550 v1.1.1
+# Source: vanilla kernel.org KVER + the image's own IKCONFIG, with only
 # CONFIG_USB_XHCI_PCI_RENESAS switched to =m. The build fails if vermagic does not match.
 
 on:
@@ -13,13 +15,19 @@ on:
       - "config/**"
 
 env:
-  KVER: "7.2.8"
-  VERMAGIC: "7.2.8-edge-sm8550 SMP preempt mod_unload aarch64"
   ARCH: arm64
   CROSS_COMPILE: aarch64-linux-gnu-
 
 jobs:
   build:
+    strategy:
+      fail-fast: false
+      matrix:
+        kver: ["7.2.8", "7.2.9"]
+    env:
+      KVER: ${{ matrix.kver }}
+      VERMAGIC: "${{ matrix.kver }}-edge-sm8550 SMP preempt mod_unload aarch64"
+      DEVCONFIG: config/device-${{ matrix.kver }}-edge-sm8550.config
     runs-on: ubuntu-24.04
     container: ubuntu:26.04
     timeout-minutes: 60
@@ -45,19 +53,19 @@ jobs:
           tar xf "linux-${KVER}.tar.xz"
 
       - name: Config = device IKCONFIG + USB_XHCI_PCI_RENESAS=m
-        working-directory: linux-${{ env.KVER }}
+        working-directory: linux-${{ matrix.kver }}
         run: |
-          cp ../config/device-7.2.8-edge-sm8550.config .config
+          cp "../${DEVCONFIG}" .config
           ./scripts/config --module USB_XHCI_PCI_RENESAS
           make olddefconfig
           grep -E "^CONFIG_USB_XHCI_PCI|^CONFIG_LOCALVERSION=" .config
           # report what olddefconfig changed vs the device (patch-only symbols vanish; core options must not)
-          diff <(grep '^CONFIG_' ../config/device-7.2.8-edge-sm8550.config | sort) <(grep '^CONFIG_' .config | sort) > ../config-diff.txt || true
+          diff <(grep '^CONFIG_' "../${DEVCONFIG}" | sort) <(grep '^CONFIG_' .config | sort) > ../config-diff.txt || true
           echo "config diff lines: $(wc -l < ../config-diff.txt)"
           grep -E "MODULE|SMP|PREEMPT|KALLSYMS|LOCALVERSION|TRACEPOINT|FTRACE|BTF|KASAN|RANDSTRUCT|DEBUG_LIST|SHADOW_CALL|ARM64_BTI|ARM64_PTR_AUTH|CFI" ../config-diff.txt || echo "no core-option differences"
 
       - name: Build xhci-pci-renesas.ko
-        working-directory: linux-${{ env.KVER }}
+        working-directory: linux-${{ matrix.kver }}
         run: |
           make -j"$(nproc)" modules_prepare
           make -j"$(nproc)" KBUILD_MODPOST_WARN=1 M="$PWD/drivers/usb/host" modules
@@ -71,7 +79,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: xhci-pci-renesas-7.2.8-edge-sm8550
+          name: xhci-pci-renesas-${{ matrix.kver }}-edge-sm8550
           path: |
             xhci-pci-renesas.ko
             xhci-pci-renesas.ko.sha256

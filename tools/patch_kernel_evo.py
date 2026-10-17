@@ -48,18 +48,27 @@ def walk(n, path=""):
 def patch_dtb(blob):
     t = fdt.parse_dtb(blob)
     names = {n.name for _, n in walk(t.root)}
-    if "gpio-keys-pocket-evo" in names or "splash_region@b8000000" in names:
+    if "gpio-keys-pocket-evo" in names:
         raise SystemExit("EVO DTB already patched")
     next_ph = max(n.get_property("phandle").data[0] for _, n in walk(t.root)
                   if any(p.name == "phandle" for p in n.props)) + 1
     tlmm = t.get_node("/soc@0/pinctrl@f100000")
     tlmm_ph = tlmm.get_property("phandle").data[0]
 
-    sp = fdt.Node("splash_region@b8000000")
-    sp.append(fdt.PropWords("reg", 0x0, 0xB8000000, 0x0, 0x2B00000))
-    sp.append(fdt.PropStrings("label", "cont_splash_region"))
-    sp.append(fdt.Property("no-map"))
-    t.get_node("/reserved-memory").append(sp)
+    rmem = t.get_node("/reserved-memory")
+    if rmem.exist_subnode("splash_region@b8000000"):
+        # v1.1.1 and later already keep the node; accept it only if it is the verified one
+        sp = rmem.get_subnode("splash_region@b8000000")
+        if (list(sp.get_property("reg").data) != [0x0, 0xB8000000, 0x0, 0x2B00000]
+                or not sp.exist_property("no-map")):
+            raise SystemExit("splash_region@b8000000 present but differs from the verified node")
+        print("splash_region@b8000000 already present and identical, keeping it")
+    else:
+        sp = fdt.Node("splash_region@b8000000")
+        sp.append(fdt.PropWords("reg", 0x0, 0xB8000000, 0x0, 0x2B00000))
+        sp.append(fdt.PropStrings("label", "cont_splash_region"))
+        sp.append(fdt.Property("no-map"))
+        rmem.append(sp)
 
     st = fdt.Node("evo-keys-default-state")
     st.append(fdt.PropStrings("pins", *[f"gpio{g}" for g in sorted(k[2] for k in KEYS)]))
