@@ -1,6 +1,10 @@
+![SteamOS ARM on AYANEO Pocket EVO](docs/promo.png)
+
 # evo-sm8550-fixes
 
-Interim fixes for running MaSieS4Fun's SteamOS ARM (SM8550) test image on an **AYANEO Pocket EVO**.
+**한국어 버전: [README.ko.md](README.ko.md)**
+
+Interim fixes for running [MaSieS4Fun's SteamOS ARM (SM8550)](https://github.com/MaSieS4Fun/SteamOS-ARM-SM8550) test image on an **AYANEO Pocket EVO**.
 Everything here was verified on real hardware (EVO Retro Power edition).
 
 ## Status (2026-10-15)
@@ -73,6 +77,17 @@ Apply `image-config/sm8550-display.conf.patch` to `/usr/share/steamos-odin/devic
 
 Remove the module and InputPlumber files, `depmod -a`, restart InputPlumber,
 put back `KERNEL.orig` and the original `sm8550-display.conf`.
+
+## Repository layout
+
+| Path | Contents |
+|------|----------|
+| `.github/workflows/build-xhci-renesas.yml` | Builds `xhci-pci-renesas.ko` for the image kernels |
+| `dts/pocket-evo-fixes.dtsi` | DTB fixes: splash region + extra-button GPIO keys |
+| `inputplumber/` | EVO device profile and capability map (virtual Steam Deck) |
+| `image-config/sm8550-display.conf.patch` | Desktop orientation fix (one line) |
+| `tools/patch_kernel_evo.py` | Patches the EVO DTB inside the image's `KERNEL` file |
+| `config/` | Kernel configs of the image kernels (7.2.8 / 7.2.9) |
 
 ## What the workflow builds
 
